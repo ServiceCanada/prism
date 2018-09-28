@@ -1,0 +1,12 @@
+#!/usr/bin/env perl
+
+use common::sense;
+use LWP::Simple;
+use Path::Tiny;
+
+use lib path($0)->parent->sibling('cgi-lib')->absolute->stringify;
+
+use YAML::Tiny;
+
+
+my $config = YAML::Tiny->read( path($0)->sibing->('setup.yaml')->stringify )->[0];
