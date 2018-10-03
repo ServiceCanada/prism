@@ -1,0 +1,15 @@
+#!/usr/bin/env perl
+use common::sense;
+
+use Env;
+
+use Path::Tiny;
+use lib path($0)->parent( {{ root.level }} );
+
+use YAML::XS 'LoadFile';
+
+# =================
+# = PREPROCESSING =
+# =================
+my $config = LoadFile path($0)->sibling('index.yml')->stringify;
+

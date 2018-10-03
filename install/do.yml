@@ -1,0 +1,27 @@
+---
+- pluck:
+    uri: https://github.com/beelabs-canada/mason/archive/master.zip
+    resources:
+        - from: mason
+          to: ../mason
+        - from: .mason
+          to: ../.mason
+- pluck:
+    target: darwin
+    uri: https://github.com/jgm/pandoc/releases/download/2.3.1/pandoc-2.3.1-macOS.zip
+    resources:
+        - from: bin/pandoc
+          to: ../vendor/pandoc/darwin/pandoc
+- pluck:
+    target: win
+    uri: https://github.com/jgm/pandoc/releases/download/2.3.1/pandoc-2.3.1-windows-x86_64.zip
+    resources:
+        - from: bin/pandoc.exe
+          to: ../vendor/pandoc/win/pandoc.exe
+- pluck:
+    target: linux
+    uri: https://github.com/jgm/pandoc/releases/download/2.3.1/pandoc-2.3.1-linux.tar.gz
+    resources:
+        - from: bin/pandoc.exe
+          to: ../vendor/pandoc/linux/pandoc
+          
