@@ -1,65 +1,85 @@
-#!/Users/masterbee/perl5/perlbrew/perls/perl-5.16.3/bin/perl
+#!/usr/bin/env perl
 use common::sense;
 
+use Furl;   
+use Digest::SHA;
 use Path::Tiny;
-use YAML::XS 'LoadFile';
-use Encode::Encoder qw(encoder);
-use HTTP::Tiny;
-use UUID::Tiny ':std';
-use Digest::SHA qw(sha256_base64);
-use Data::Dmp;
-
 use lib path($0)->parent(5)->child('cgi-lib')->stringify;
 
-use Encode::Base64;
+use YAML::Tiny;
+use JSON::MaybeXS;
+use UUID::Tiny ':std';
+use Encode::Encoder qw(encoder);
+use MIME::Base64;
+
+use Data::Dmp qw/dd dmp/;
 
 # =================
 # = PREPROCESSING =
 # =================
-my $config = LoadFile path($0)->sibling('index.yml')->stringify;
-my $json = '{"reportName":"visits-and-pageviews","sortReportByCount":true,"reportDescription":{"anomalyDetection":false,"currentData":false,"dateFrom":"2018-09-01","sortBy":"visits","dateTo":"2018-09-30","reportSuiteID":"canadalivemain","elementDataEncoding":"utf8","locale":"en_US","metrics":[{"id":"visits"},{"id":"pageviews"}],"elements":[{"id":"accountsummary"}],"expedite":false}}';
+my $config = YAML::Tiny->read( path($0)->sibling('index.yml')->stringify )->[0];
+my $http = Furl->new( timeout => 30, agent => 'Canada.ca Auditor v1.0' );
+my ( $json, $report ) = (
+        JSON::MaybeXS->new( utf8 => 1 ),
+        {
+            reportName => "visits-and-pageviews",
+            sortReportByCount => JSON::MaybeXS::true,
+            reportDescription => { 
+                anomalyDetection => JSON::MaybeXS::false,
+                currentData => JSON::MaybeXS::false,
+                dateFrom => "2018-09-01",
+                dateTo => "2018-09-30",
+                sortBy => "visits",
+                reportSuiteID => "canadalivemain",
+                elementDataEncoding => "utf8",
+                locale => "en_US",
+                metrics => [ { id => "visits" },{ id => "pageviews" } ],
+                elements => [ { id => "accountsummary" } ],
+                expedite => JSON::MaybeXS::false
+                }
+            }
+    );
 
-my $response = HTTP::Tiny->new->request( 'POST', 'https://api5.omniture.com/admin/1.4/rest/?method=Report.Get', {
-    headers => {
-        'X-WSSE' => authentication( $config->{'creds'}->{'username'}, $config->{'creds'}->{'password'} ),
-        'Content-Type' => 'application/json' 
-    },
-    content => $json
-});
+my $res = $http->post(
+    'https://api5.omniture.com/admin/1.4/rest/?method=Report.Queue',
+    [ 'X-WSSE' => generate( $config->{'creds'}->{'username'}, $config->{'creds'}->{'secret'} ) ],
+    encode_json( $report )
+    );
+    
+die $res->status_line unless $res->is_success;
+print $res->content;
+# ====================
+# = HELPER FUNCTIONS =
+# ====================
 
-dd $response;
-
-
-# ======================
-# = HELPER SUBROUTINES =
-# ======================
-
-sub authentication
+sub generate
 {
-    my ( $username, $password ) = @_;
+    my( $username, $password ) = @_;
     
-    my $nonce = create_uuid(UUID_V4);
-    my $created = now_w3cdtf();
+    say "$password";
+            
+    my ( $nonce, $created ) = (
+        uuid_to_string( create_uuid( UUID_V4 ) ),
+        now_w3cdtf()
+    );
     
-    return join( ' ', 'UsernameToken',
-        'Username=\"'.$username.'\"',
-        'PasswordDigest=\"'.sha256_base64( $nonce.$created.$password ).'\"',
-        'Nonce=\"'.encoder($nonce)->iso_8859_1->base64.'\"',
-        'Created=\"'.$created.'\"',
-        'Algorithm=\"SHA256\"');   
+    return join( ' ',
+        'UsernameToken',
+        'Username="'.$username.'",',
+        'PasswordDigest="'.encode_base64( Digest::SHA::sha256( $nonce.$created.$password ) ).'",',
+        'Nonce="'. encode_base64( $nonce ).'",',
+        'Created="'.$created.'",',
+        'Algorithm="SHA256"'
+    );
 }
-
 
 sub now_w3cdtf {
     my ( $sec, $min, $hour, $mday, $mon, $year ) = gmtime();
     $mon++;
     $year += 1900;
- 
+
     sprintf(
-        '%04s-%02s-%02sT%02s:%02s:%02sZ',
+        '%04s-%02s-%02sT%02s:%02s:%02s.297Z',
         $year, $mon, $mday, $hour, $min, $sec,
     );
 }
-
-
-
