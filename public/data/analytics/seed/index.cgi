@@ -1,10 +1,11 @@
-#!/usr/bin/env perl
+#!/usr/bin/perlml
 use common::sense;
+use lib path($0)->parent(5)->child('cgi-lib')->stringify;
 
+use cPanelUserConfig;
 use Furl;   
 use Digest::SHA;
 use Path::Tiny;
-use lib path($0)->parent(5)->child('cgi-lib')->stringify;
 
 use YAML::Tiny;
 use JSON::MaybeXS;
