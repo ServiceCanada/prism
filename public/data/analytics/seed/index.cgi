@@ -11,43 +11,59 @@ use JSON::MaybeXS;
 use UUID::Tiny ':std';
 use Encode::Encoder qw(encoder);
 use MIME::Base64;
+use POSIX;
+use Mustache::Simple;
 
 use Data::Dmp qw/dd dmp/;
 
 # =================
 # = PREPROCESSING =
 # =================
-my $config = YAML::Tiny->read( path($0)->sibling('index.yml')->stringify )->[0];
-my $http = Furl->new( timeout => 30, agent => 'Canada.ca Auditor v1.0' );
-my ( $json, $report ) = (
-        JSON::MaybeXS->new( utf8 => 1 ),
-        {
-            reportName => "visits-and-pageviews",
-            sortReportByCount => JSON::MaybeXS::true,
-            reportDescription => { 
-                anomalyDetection => JSON::MaybeXS::false,
-                currentData => JSON::MaybeXS::false,
-                dateFrom => "2018-09-01",
-                dateTo => "2018-09-30",
-                sortBy => "visits",
-                reportSuiteID => "canadalivemain",
-                elementDataEncoding => "utf8",
-                locale => "en_US",
-                metrics => [ { id => "visits" },{ id => "pageviews" } ],
-                elements => [ { id => "accountsummary" } ],
-                expedite => JSON::MaybeXS::false
-                }
-            }
-    );
+my ( $config, $http, $json, $base, $stache, $from, $to ) = (
+    YAML::Tiny->read( path($0)->sibling('index.yml')->stringify )->[0],
+    Furl->new( timeout => 30, agent => 'Canada.ca Auditor v1.0' ),
+    JSON::MaybeXS->new( utf8 => 1 ),
+    path($0)->parent,
+    Mustache::Simple->new,
+    POSIX::strftime( '%Y-%m-%d', localtime( time() - (30*24*60*60) ) ),
+    POSIX::strftime( '%Y-%m-%d', localtime( time() ) )
+);
 
-my $res = $http->post(
-    'https://api5.omniture.com/admin/1.4/rest/?method=Report.Queue',
-    [ 'X-WSSE' => generate( $config->{'creds'}->{'username'}, $config->{'creds'}->{'secret'} ) ],
-    encode_json( $report )
+my ( $username, $secret ) = ( $config->{'http'}->{'creds'}->{'username'},  $config->{'http'}->{'creds'}->{'secret'} );
+
+foreach my $resource ( @{ $config->{'catalog'} } )
+{   
+    say " [report] ".$resource->{'title'}." generating ";
+    my $reportid = $http->post(
+        $resource->{'prefetch'},
+        [ 'X-WSSE' => generate( $username, $secret ) ],
+        $stache->render( $base->child( $resource->{'content'} )->slurp_utf8, { to => $to, from => $from } )
     );
     
-die $res->status_line unless $res->is_success;
-print $res->content;
+    my ( $wait ) = ( 1 );
+    
+    while( $wait )
+    {
+        my $report = $http->post(
+            $resource->{'uri'},
+            [ 'X-WSSE' => generate( $username, $secret ) ],
+            $reportid->content
+        );
+        
+        if ( $report->content =~ /"error":"report_not_ready"/ )
+        {
+            say "   ... report not ready waiting a few seconds";
+            sleep $resource->{'sleep'};
+            next;
+        }
+        
+        $base->child( $resource->{'store'} )->absolute->spew_utf8( $report->content );
+        $wait = 0;
+    }
+    say "      ... stored ";
+    say "-"x40;
+}
+
 # ====================
 # = HELPER FUNCTIONS =
 # ====================
@@ -55,9 +71,7 @@ print $res->content;
 sub generate
 {
     my( $username, $password ) = @_;
-    
-    say "$password";
-            
+                
     my ( $nonce, $created ) = (
         uuid_to_string( create_uuid( UUID_V4 ) ),
         now_w3cdtf()

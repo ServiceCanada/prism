@@ -1,1 +1,2 @@
-DirectoryIndex index.json index.html index.cgi
+# Directory indexing preference
+DirectoryIndex index.json index.html index.htm index.cgi
