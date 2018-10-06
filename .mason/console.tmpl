@@ -1,11 +1,10 @@
 #!/usr/bin/env perl
 use common::sense;
+use File::Spec;
+use lib substr( File::Spec->rel2abs($0), 0, rindex( File::Spec->rel2abs($0), '/public/' ) ) . '/cgi-lib' ;
 
-use Path::Tiny;
-
-use lib path($0)->parent({{ root.levels }})->child('cgi-lib')->stringify;
 use YAML::Tiny;
-
+use Path::Tiny;
 
 # =================
 # = PREPROCESSING =
